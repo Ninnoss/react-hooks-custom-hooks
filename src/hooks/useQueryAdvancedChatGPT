@@ -1,0 +1,59 @@
+import { useEffect, useReducer, useRef } from 'react';
+
+const initialState = {
+  isLoaded: false,
+  data: null,
+  error: null,
+};
+
+function fetchReducer(state, action) {
+  switch (action.type) {
+    case 'FETCH_START':
+      return { ...state, isLoaded: false };
+    case 'FETCH_SUCCESS':
+      return { ...state, isLoaded: true, data: action.payload };
+    case 'FETCH_ERROR':
+      return { ...state, isLoaded: true, error: action.payload };
+    default:
+      return state;
+  }
+}
+
+function useQuery(url) {
+  const [state, dispatch] = useReducer(fetchReducer, initialState);
+  const cachedData = useRef(null);
+  const abortController = useRef(new AbortController()); // create a reference to the abort controller
+
+  useEffect(() => {
+    // reset the abort controller on each useEffect call
+    abortController.current = new AbortController();
+
+    if (cachedData.current) {
+      dispatch({ type: 'FETCH_SUCCESS', payload: cachedData.current });
+      return;
+    }
+
+    dispatch({ type: 'FETCH_START' });
+    fetch(url, { signal: abortController.current.signal }) // pass the abort signal to fetch
+      .then((r) => r.json())
+      .then((data) => {
+        cachedData.current = data;
+        dispatch({ type: 'FETCH_SUCCESS', payload: data });
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          // check if the error is not an abort error
+          dispatch({ type: 'FETCH_ERROR', payload: err });
+        }
+      });
+
+    // return a cleanup function that cancels the fetch request
+    return () => {
+      abortController.current.abort();
+    };
+  }, [url]);
+
+  return state;
+}
+
+export default useQuery;
